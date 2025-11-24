@@ -1,4 +1,3 @@
-// js/App.js
 import { UIManager } from "./UIManager.js";
 import { TabGame } from "./TabGame.js";
 import { OnlineGame } from "./OnlineGame.js";
@@ -10,20 +9,29 @@ document.addEventListener("DOMContentLoaded", () => {
   const localGame = new TabGame(ui);
   const onlineGame = new OnlineGame(ui);
 
-  // Por omissão, assumimos modo local
-  ui.onThrow = () => localGame.rollSticks();
-  ui.onQuit  = () => localGame.quitGame();
+  // Variável para rastrear a instância de jogo atualmente ativa
+  let activeGame = localGame; 
+
+  // Os callbacks da UI chamam SEMPRE a instância ativa (localGame ou onlineGame)
+  ui.onThrow = () => activeGame.rollSticks(); // rollSticks existe nas duas classes
+  ui.onQuit  = () => activeGame.quitGame();   // quitGame/handleLeave existe nas duas classes
 
   // onGoToGame escolhe o motor
   ui.onGoToGame = ({ cols, mode, first, aiLevel }) => {
     if (mode === "pvc" || mode === "pvp_local") {
-      // jogo local original
+      // 1. Define o motor LOCAL como ativo
+      activeGame = localGame; 
+      
+      // 2. Inicializa o jogo
       localGame.init(cols, first);
       ui.addMessage("System", `New LOCAL game: ${mode}, first to play: ${first}.`);
     } else if (mode === "pvp_online") {
-      // jogo online
+      // 1. Define o motor ONLINE como ativo
+      activeGame = onlineGame;
+      
+      // 2. Inicializa o jogo online
       ui.addMessage("System", "Starting ONLINE game...");
-      onlineGame.start(cols);
+      onlineGame.start(cols); // onlineGame irá definir seus próprios onThrow/onQuit internamente
     }
 
     document.querySelector(".bottom")?.scrollIntoView({ behavior: "smooth" });
@@ -51,11 +59,10 @@ document.addEventListener("DOMContentLoaded", () => {
   ruleItems.forEach(item => {
     const summary = item.querySelector("summary");
     summary.addEventListener("click", (e) => {
-      e.preventDefault(); // impede abrir o <details>
+      e.preventDefault(); 
       const title = summary.textContent.trim();
       const textContainer = item.querySelector("div, p");
       const text = textContainer ? textContainer.innerHTML : "";
-
 
       // define conteúdo no overlay
       ruleTitle.textContent = title;
@@ -90,7 +97,7 @@ document.addEventListener("DOMContentLoaded", () => {
         .scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }
-  // classificações - guarda resultados  
+  // classificações - guarda resultados (Lógica de localStorage)  
   window.recordGameResult = function (winner, piecesLeft) {
     const result = {
       date: new Date().toISOString().split("T")[0],
