@@ -34,6 +34,10 @@ export class UIManager {
     this.passInput = document.querySelector(".pass-input");
     this.welcomeText = document.querySelector(".welcome-text");
 
+    // Credenciais (FIX: inicializadas aqui)
+    this.nick = null;
+    this.password = null;
+
     // Leaderboard
     this.leaderboard = [];
     this.tableBody = document.querySelector(".classifications tbody");
@@ -43,10 +47,10 @@ export class UIManager {
     this.onQuit = null;
     this.onGoToGame = null;
     this.onConfigChange = null;
-    this.onPass = null; // Callback para o botão Skip
+    this.onPass = null;
   }
 
-  // Inicialização e listeners 
+  //Inicialização e listeners 
   initListeners() {
     // Botões principais
     this.throwBtn?.addEventListener("click", () => this.onThrow?.());
@@ -107,7 +111,7 @@ export class UIManager {
       }
 
       this.addMessage("System", "Registering / logging in on server...");
-      
+      // FIX: Adicionado uso de `register` que estava em falta
       const res = await register(nick, pass);
 
       if (res.error) {
@@ -124,10 +128,6 @@ export class UIManager {
       this.logoutBtn.disabled = false;
       this.welcomeText.textContent = `Welcome, ${nick}!`;
       this.welcomeText.classList.remove("hidden");
-
-      // Limpa os campos após sucesso
-      this.userInput.value = '';
-      this.passInput.value = '';
 
       this.addMessage("System", "Authentication succeeded on server.");
     });
@@ -194,6 +194,7 @@ export class UIManager {
     const active = currentPlayer === "G" ? this.goldCounter : this.blackCounter;
     active?.classList.add("active");
   }
+
 
 
   // Destaques no tabuleiro
@@ -276,7 +277,7 @@ export class UIManager {
     audio.play().catch(() => {});
   }
 
-  // Controlo do botão de lançamento
+  // Controlo do botão de lançamento 
   setRollEnabled(can) {
     const rollBtn = document.querySelector(".throw-btn");
     if (!rollBtn) return;
@@ -285,26 +286,26 @@ export class UIManager {
     rollBtn.classList.toggle("enabled", can);
   }
 
-  // Lógica de ativação/desativação do botão de lançamento para o modo LOCAL
   refreshRollButton(game) {
-    const can =
-      !game.gameOver &&
-      game.currentRoll === null &&
-      (game.extraRollPending || game.turnRolls === 0);
+    const canRollMethod = game.canRoll;
+
+    // FIX: Corrigido o erro de regressão. Agora verifica se é OnlineGame (via canRoll)
+    // ou se é local (com a lógica original).
+    const isOnline = canRollMethod !== undefined && typeof canRollMethod === 'function';
+    let can;
+
+    if (isOnline) {
+      // OnlineGame logic: uses canRoll()
+      can = game.canRoll();
+    } else {
+      // TabGame (local/PvC) logic (Lógica original)
+      can =
+        !game.gameOver &&
+        game.currentRoll === null &&
+        (game.extraRollPending || game.turnRolls === 0);
+    }
 
     this.setRollEnabled(can);
-  }
-
-  // Lógica de ativação/desativação do botão de lançamento para o modo ONLINE (Nova função)
-  refreshRollButtonOnline(canRoll) {
-    this.setRollEnabled(canRoll);
-  }
-
-  // Controlo do botão Passar a Vez (Skip Turn) (Nova função)
-  setSkipEnabled(can) {
-    if (!this.skipBtn) return;
-    this.skipBtn.disabled = !can;
-    this.skipBtn.classList.toggle("enabled", can);
   }
 
 }

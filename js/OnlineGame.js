@@ -11,10 +11,11 @@ export class OnlineGame {
     this.currentTurn = null;  // nick com vez
     this.initialNick = null;  // quem começou
     this.pieces = null;
-    this.step = null;         // 'from', 'to', etc. (Vindo do servidor)
+    this.step = null;
     this.mustPass = null;
     this.dice = null;
     this.winner = null;
+    this.players = null; // FIX: Adicionado para guardar o mapa Nick -> Color
   }
 
   async start(cols) {
@@ -43,7 +44,7 @@ export class OnlineGame {
       nick,
       this.gameId,
       (data) => this.handleUpdate(data),
-      (error) => this.ui.addMessage("System", "Connection lost to server (update). " + error)
+      () => this.ui.addMessage("System", "Connection lost to server (update).")
     );
 
     // Botões
@@ -56,10 +57,17 @@ export class OnlineGame {
     if (!this.canRoll()) return;
 
     const { nick, password } = this.ui.getCredentials();
+    this.ui.addMessage("System", "Throwing sticks...");
     const res = await roll(nick, password, this.gameId);
     if (res.error) {
       this.ui.addMessage("System", `Roll error: ${res.error}`);
     }
+    // resultado vem no update
+  }
+
+  // FIX: Adicionado quitGame para compatibilidade com App.js
+  quitGame() {
+    this.handleLeave();
   }
 
   async handleLeave() {
@@ -71,8 +79,12 @@ export class OnlineGame {
   }
 
   async handlePass() {
-    if (!this.canPass()) return;
+    if (!this.canPass()) {
+      this.ui.addMessage("System", "Cannot skip turn right now.");
+      return;
+    }
     const { nick, password } = this.ui.getCredentials();
+    this.ui.addMessage("System", `${nick} is skipping turn...`);
     const res = await passTurn(nick, password, this.gameId);
     if (res.error) {
       this.ui.addMessage("System", `Pass error: ${res.error}`);
@@ -80,34 +92,26 @@ export class OnlineGame {
   }
 
   async handleCellClick(r, c) {
-    const creds = this.ui.getCredentials();
-    
-    // 1. VERIFICAÇÃO DE TURNO
-    if (this.currentTurn !== creds?.nick) {
-        this.ui.addMessage("System", "It's not your turn to move.");
-        return;
-    }
-
-    // 2. VERIFICAÇÃO DE DADO ROLADO (CRÍTICO para evitar 400 antes do roll)
-    if (this.dice === null || this.dice === undefined) {
-        this.ui.addMessage("System", "You must roll the sticks first!");
-        return;
-    }
-    
-    // 3. ENVIAR NOTIFICAÇÃO (Seleção/Destino)
+    // converte (r, c) para índice no array pieces do servidor
     const cellIndex = this.uiCoordToServerIndex(r, c);
-    const { nick, password } = creds;
-    
-    console.log(`[DEBUG NOTIFY] Enviando cellIndex: ${cellIndex}. STEP: ${this.step}`);
-
+    const { nick, password } = this.ui.getCredentials();
     const res = await notify(nick, password, this.gameId, cellIndex);
-
     if (res.error) {
       this.ui.addMessage("System", `Move error: ${res.error}`);
-      // Limpa os destaques para que o jogador tente outra seleção após o erro 400
-      this.ui.clearHighlights(true);
     }
   }
+  
+  // FIX: Adicionado método para refrescar o botão Skip
+  refreshSkipButton() {
+    const skipBtn = this.ui.skipBtn;
+    if (!skipBtn) return;
+    
+    const canSkip = this.canPass();
+
+    skipBtn.disabled = !canSkip;
+    skipBtn.classList.toggle("enabled", canSkip);
+  }
+
 
   handleUpdate(data) {
     console.log("[UPDATE from server]", data);
@@ -117,46 +121,39 @@ export class OnlineGame {
       return;
     }
 
-    const previousDice = this.dice;
     const previousTurn = this.currentTurn;
 
-    // 1) Atualizar estado: peças, turno, step e dado
+    // 1) Atualizar peças / estado do tabuleiro, se vierem
     if (data.pieces) {
       this.pieces = data.pieces;
       this.initialNick = data.initial ?? this.initialNick;
-      this.players = data.players ?? this.players;
+      this.step = data.step ?? this.step;
+      this.players = data.players ?? this.players; // Recebe o mapa de players
 
       this.renderBoardFromPieces();
     }
-    
+
+    // 2) Atualizar infos de turno / dado / mustPass, mesmo que venha sem "pieces"
     if (data.turn !== undefined) {
       this.currentTurn = data.turn;
     }
     if (data.mustPass !== undefined) {
       this.mustPass = data.mustPass;
-      // LIGAÇÃO CRÍTICA 1: Habilita/Desabilita o botão 'Passar'
-      this.ui.setSkipEnabled(this.canPass()); 
-    }
-    if (data.dice !== undefined) {
-      this.dice = data.dice;
-    }
-    if (data.step !== undefined) {
-      this.step = data.step;
-      this.ui.clearHighlights(false); 
     }
     
-    // 2) Animação do Dado e Mensagem (CORREÇÃO [OBJECT OBJECT])
-    if (this.dice !== previousDice && this.dice !== null && this.dice !== undefined) {
-      
-      const diceValue = Number(this.dice); 
-      
+    // FIX: Animação dos paus quando o dado chega
+    if (data.dice !== undefined) {
+      this.dice = data.dice;
+
+      const rollValue = data.dice.value;
+      const sticks = data.dice.stickValues; 
+      const upCount = sticks.filter(v => v).length;
       const symbols = ["••••", "⎮•••", "⎮⎮••", "⎮⎮⎮•", "⎮⎮⎮⎮"];
-      const upCount = (diceValue === 6) ? 0 : diceValue; 
-      const symbol = symbols[upCount]; 
-      
-      // O valor enviado para a UI é o número, resolvendo o erro visual
-      this.ui.animateSticks(symbol, diceValue, false);
-      this.ui.addMessage("System", `Sticks rolled: ${diceValue}`); 
+      const symbol = symbols[upCount];
+      const repeat = data.dice.keepPlaying; 
+
+      this.ui.animateSticks(symbol, rollValue, repeat);
+      this.ui.addMessage("System", `${this.currentTurn} rolled: ${rollValue}${repeat ? " (extra roll)" : ""}`);
     }
 
     // 3) Mensagens de início de jogo / mudança de vez
@@ -166,11 +163,7 @@ export class OnlineGame {
       this.ui.addMessage("System", `It's now ${this.currentTurn}'s turn.`);
     }
 
-    // 4) LIGAÇÃO CRÍTICA 2: Atualização do botão Rolar
-    this.ui.refreshRollButtonOnline(this.canRoll());
-
-
-    // 5) Fim de jogo
+    // 4) Fim de jogo
     if (data.winner !== undefined) {
       this.winner = data.winner;
       if (this.winner) {
@@ -178,8 +171,12 @@ export class OnlineGame {
       } else {
         this.ui.addMessage("System", "Game ended without a winner.");
       }
-      this.cleanup();
+      this.cleanup(); // fecha o EventSource
     }
+
+    // FIX: Atualiza botões
+    this.ui.refreshRollButton(this);
+    this.refreshSkipButton();
   }
 
 
@@ -189,26 +186,23 @@ export class OnlineGame {
       this.eventSource = null;
     }
     this.gameId = null;
-    
-    // Desativar botões da UI após cleanup
-    this.ui.setRollEnabled(false);
-    this.ui.setSkipEnabled(false);
   }
 
   canRoll() {
     const creds = this.ui.getCredentials();
-    if (!creds || !this.gameId || !this.currentTurn) {
-        return false;
+    if (!creds) {
+      return false;
     }
 
-    const isMyTurn = this.currentTurn === creds.nick;
-    const diceNotRolled = this.dice === null || this.dice === undefined;
+    if (!this.gameId || !this.currentTurn || this.dice) {
+      return false;
+    }
+
+    if (this.currentTurn !== creds.nick) {
+      return false;
+    }
     
-    if (isMyTurn && !diceNotRolled) {
-        this.ui.addMessage("System", "You already rolled the sticks this turn.");
-    }
-
-    return isMyTurn && diceNotRolled;
+    return true;
   }
 
 
@@ -221,6 +215,7 @@ export class OnlineGame {
   // === MAPEAMENTO PIECES[] -> MATRIZ PARA UI ===
 
   serverIndexToUICoord(idx) {
+    // server: 0 = canto inferior direito, visto pelo inicial
     const size = this.size;
     const rowFromBottom = Math.floor(idx / size); // 0 = bottom row
     const colFromRight = idx % size;             // 0 = rightmost col
@@ -241,18 +236,29 @@ export class OnlineGame {
   renderBoardFromPieces() {
     if (!this.pieces) return;
 
+    // cria matriz 4 x size com as mesmas estruturas que TabGame usa
     const matrix = Array.from({ length: 4 }, () => Array(this.size).fill(null));
 
     this.pieces.forEach((p, idx) => {
       if (!p) return;
       const { r, c } = this.serverIndexToUICoord(idx);
 
-      const player = p.color === "Blue" ? "G" : "B"; 
+      // adaptamos color "Blue"/"Red" para "G"/"B"
+      const player = p.color === "Blue" ? "G" : "B";
       matrix[r][c] = { player, type: p.reachedLastRow ? "final" : (p.inMotion ? "moved" : "initial") };
     });
 
-    this.ui.renderBoard(matrix, this.currentTurn, (r, c) => this.handleCellClick(r, c));
+    // FIX: Determina o currentPlayer corretamente para o UI (G ou B)
+    let currentPlayer = "G"; 
+    if (this.currentTurn && this.players) {
+      const turnColor = this.players[this.currentTurn];
+      if (turnColor === "Blue") {
+        currentPlayer = "G";
+      } else if (turnColor === "Red") {
+        currentPlayer = "B";
+      }
+    }
+
+    this.ui.renderBoard(matrix, currentPlayer, (r, c) => this.handleCellClick(r, c));
   }
 }
-
-

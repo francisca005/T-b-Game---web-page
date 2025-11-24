@@ -15,6 +15,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // Os callbacks da UI chamam SEMPRE a instância ativa (localGame ou onlineGame)
   ui.onThrow = () => activeGame.rollSticks(); // rollSticks existe nas duas classes
   ui.onQuit  = () => activeGame.quitGame();   // quitGame/handleLeave existe nas duas classes
+  // FIX: onPass é definido APENAS quando o jogo online está ativo. Para o local, usa o evento interno do TabGame.
+  // Deixa-o a null para começar.
 
   // onGoToGame escolhe o motor
   ui.onGoToGame = ({ cols, mode, first, aiLevel }) => {
@@ -25,13 +27,18 @@ document.addEventListener("DOMContentLoaded", () => {
       // 2. Inicializa o jogo
       localGame.init(cols, first);
       ui.addMessage("System", `New LOCAL game: ${mode}, first to play: ${first}.`);
+
+      // Limpa o onPass para garantir que o skip button é controlado pelo TabGame
+      ui.onPass = null; 
+      
     } else if (mode === "pvp_online") {
       // 1. Define o motor ONLINE como ativo
       activeGame = onlineGame;
       
       // 2. Inicializa o jogo online
       ui.addMessage("System", "Starting ONLINE game...");
-      onlineGame.start(cols); // onlineGame irá definir seus próprios onThrow/onQuit internamente
+      onlineGame.start(cols); // onlineGame irá definir seus próprios onThrow/onQuit/onPass internamente
+      // O OnlineGame.start() irá redefinir onThrow, onQuit e onPass, garantindo que o skip button funciona para o online.
     }
 
     document.querySelector(".bottom")?.scrollIntoView({ behavior: "smooth" });
