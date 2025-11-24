@@ -11,7 +11,7 @@ export class OnlineGame {
     this.currentTurn = null;  // nick com vez
     this.initialNick = null;  // quem começou
     this.pieces = null;
-    this.step = null;
+    this.step = null;         // Novo: 'from', 'to', etc. (Vindo do servidor)
     this.mustPass = null;
     this.dice = null;
     this.winner = null;
@@ -43,7 +43,7 @@ export class OnlineGame {
       nick,
       this.gameId,
       (data) => this.handleUpdate(data),
-      (error) => this.ui.addMessage("System", "Connection lost to server (update). " + error) // Melhoria do log de erro
+      (error) => this.ui.addMessage("System", "Connection lost to server (update). " + error)
     );
 
     // Botões
@@ -81,24 +81,35 @@ export class OnlineGame {
   }
 
   async handleCellClick(r, c) {
-    // Adicionar verificação de turno antes de tentar notificar
     const creds = this.ui.getCredentials();
+    
+    // 1. VERIFICAÇÃO DE TURNO
     if (this.currentTurn !== creds?.nick) {
         this.ui.addMessage("System", "It's not your turn to move.");
         return;
     }
+
+    // 2. VERIFICAÇÃO DE DADO ROLADO
+    if (this.dice === null || this.dice === undefined) {
+        this.ui.addMessage("System", "You must roll the sticks first!");
+        return;
+    }
     
-    // converte (r, c) para índice no array pieces do servidor
+    // 3. ENVIAR NOTIFICAÇÃO (seleção/destino)
     const cellIndex = this.uiCoordToServerIndex(r, c);
     const { nick, password } = creds;
     
-    // Debug
-    console.log(`[DEBUG NOTIFY] Enviando cellIndex: ${cellIndex}`);
+    console.log(`[DEBUG NOTIFY] Enviando cellIndex: ${cellIndex}. STEP: ${this.step}`);
 
     const res = await notify(nick, password, this.gameId, cellIndex);
+
     if (res.error) {
       this.ui.addMessage("System", `Move error: ${res.error}`);
+      // Limpa os destaques para permitir que o utilizador tente selecionar outra peça/destino
+      this.ui.clearHighlights(true);
     }
+    
+    // O sucesso será gerido pelo próximo handleUpdate
   }
 
   handleUpdate(data) {
@@ -111,19 +122,16 @@ export class OnlineGame {
 
     const previousDice = this.dice;
     const previousTurn = this.currentTurn;
-    const creds = this.ui.getCredentials();
 
-    // 1) Atualizar peças / estado do tabuleiro, se vierem
+    // 1) Atualizar estado: peças, turno, step e dado
     if (data.pieces) {
       this.pieces = data.pieces;
       this.initialNick = data.initial ?? this.initialNick;
-      this.step = data.step ?? this.step;
       this.players = data.players ?? this.players;
 
       this.renderBoardFromPieces();
     }
-
-    // 2) Atualizar infos de turno / dado / mustPass
+    
     if (data.turn !== undefined) {
       this.currentTurn = data.turn;
     }
@@ -135,12 +143,16 @@ export class OnlineGame {
     if (data.dice !== undefined) {
       this.dice = data.dice;
     }
+    if (data.step !== undefined) {
+      this.step = data.step;
+      // Limpa destaques após o servidor processar um passo (opcional, mas seguro)
+      this.ui.clearHighlights(false); 
+    }
     
-    // 3) Animação do Dado e Mensagem
+    // 2) Animação do Dado e Mensagem
     if (this.dice !== previousDice && this.dice !== null && this.dice !== undefined) {
-      // Valor do dado (1 a 6)
+      // O dado mudou e tem valor (i.e., foi rolado)
       const symbols = ["••••", "⎮•••", "⎮⎮••", "⎮⎮⎮•", "⎮⎮⎮⎮"];
-      // Servidor devolve 1 a 6. 6 paus = 0 pontos (símbolo symbols[0]).
       const upCount = (this.dice === 6) ? 0 : this.dice; 
       const symbol = symbols[upCount]; 
       
@@ -148,18 +160,18 @@ export class OnlineGame {
       this.ui.addMessage("System", `Sticks rolled: ${this.dice}`);
     }
 
-    // 4) Mensagens de início de jogo / mudança de vez
+    // 3) Mensagens de início de jogo / mudança de vez
     if (!previousTurn && this.currentTurn) {
       this.ui.addMessage("System", `Game started! First to play: ${this.currentTurn}.`);
     } else if (previousTurn && this.currentTurn && previousTurn !== this.currentTurn) {
       this.ui.addMessage("System", `It's now ${this.currentTurn}'s turn.`);
     }
 
-    // 5) LIGAÇÃO CRÍTICA 2: Atualização do botão Rolar
+    // 4) LIGAÇÃO CRÍTICA 2: Atualização do botão Rolar
     this.ui.refreshRollButtonOnline(this.canRoll());
 
 
-    // 6) Fim de jogo
+    // 5) Fim de jogo
     if (data.winner !== undefined) {
       this.winner = data.winner;
       if (this.winner) {
@@ -195,8 +207,8 @@ export class OnlineGame {
     const diceNotRolled = this.dice === null || this.dice === undefined;
     
     if (isMyTurn && !diceNotRolled) {
-        // Adicionar mensagem para evitar cliques desnecessários
-        this.ui.addMessage("System", "You already rolled the dice this turn.");
+        // Mensagem para evitar cliques desnecessários
+        this.ui.addMessage("System", "You already rolled the sticks this turn.");
     }
 
     // Retorna true se for a minha vez E o dado ainda não foi rolado
@@ -246,29 +258,12 @@ export class OnlineGame {
       const { r, c } = this.serverIndexToUICoord(idx);
 
       // adaptamos color "Blue"/"Red" para "G"/"B"
-      // Nota: Para o Tâb, "Gold" (G) é geralmente o jogador inicial ou de baixo. 
-      // Assumindo que "Blue" é "Gold" (G) e "Red" é "Black" (B) para consistência visual.
       const player = p.color === "Blue" ? "G" : "B"; 
       matrix[r][c] = { player, type: p.reachedLastRow ? "final" : (p.inMotion ? "moved" : "initial") };
     });
 
     // currentPlayer: quem tem a vez
-    // Fallback simples para a cor, assumindo que o nick do jogador Gold/Blue é o inicial
-    let currentPlayer = "G"; 
-    
-    // Tentativa de obter a cor correta do nick se os dados de 'players' vierem no update.
-    // Se não vierem, a cor ativa da barra de estado não é crítica, mas o tabuleiro é.
-    const creds = this.ui.getCredentials();
-    if (this.currentTurn && creds) {
-        if (this.currentTurn === creds.nick) {
-            // Se for a minha vez, a cor deve ser a do meu nick. 
-            // O servidor não fornece o mapeamento nick -> cor, mas podemos assumir.
-            // Para simplicidade, vamos manter o foco no nick.
-        }
-    }
-
-
+    // Usamos o nick do jogador que tem a vez (currentTurn) para a UI realçar
     this.ui.renderBoard(matrix, this.currentTurn, (r, c) => this.handleCellClick(r, c));
   }
 }
-
