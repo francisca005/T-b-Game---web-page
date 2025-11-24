@@ -43,10 +43,10 @@ export class UIManager {
     this.onQuit = null;
     this.onGoToGame = null;
     this.onConfigChange = null;
-    this.onPass = null;
+    this.onPass = null; // Callback para o botão Skip
   }
 
-  //Inicialização e listeners 
+  // Inicialização e listeners 
   initListeners() {
     // Botões principais
     this.throwBtn?.addEventListener("click", () => this.onThrow?.());
@@ -85,8 +85,7 @@ export class UIManager {
     this.loadLeaderboard();
   }
 
-  // Login visual (modo demonstração)
-    // Login visual + autenticação no servidor
+  // Login visual + autenticação no servidor
   initLogin() {
     if (!this.loginBtn || !this.logoutBtn) return;
 
@@ -108,6 +107,7 @@ export class UIManager {
       }
 
       this.addMessage("System", "Registering / logging in on server...");
+      
       const res = await register(nick, pass);
 
       if (res.error) {
@@ -124,6 +124,10 @@ export class UIManager {
       this.logoutBtn.disabled = false;
       this.welcomeText.textContent = `Welcome, ${nick}!`;
       this.welcomeText.classList.remove("hidden");
+
+      // Limpa os campos após sucesso
+      this.userInput.value = '';
+      this.passInput.value = '';
 
       this.addMessage("System", "Authentication succeeded on server.");
     });
@@ -190,7 +194,6 @@ export class UIManager {
     const active = currentPlayer === "G" ? this.goldCounter : this.blackCounter;
     active?.classList.add("active");
   }
-
 
 
   // Destaques no tabuleiro
@@ -273,7 +276,7 @@ export class UIManager {
     audio.play().catch(() => {});
   }
 
-  // Controlo do botão de lançamento 
+  // Controlo do botão de lançamento
   setRollEnabled(can) {
     const rollBtn = document.querySelector(".throw-btn");
     if (!rollBtn) return;
@@ -282,6 +285,7 @@ export class UIManager {
     rollBtn.classList.toggle("enabled", can);
   }
 
+  // Lógica de ativação/desativação do botão de lançamento para o modo LOCAL
   refreshRollButton(game) {
     const can =
       !game.gameOver &&
@@ -289,6 +293,18 @@ export class UIManager {
       (game.extraRollPending || game.turnRolls === 0);
 
     this.setRollEnabled(can);
+  }
+
+  // Lógica de ativação/desativação do botão de lançamento para o modo ONLINE (Nova função)
+  refreshRollButtonOnline(canRoll) {
+    this.setRollEnabled(canRoll);
+  }
+
+  // Controlo do botão Passar a Vez (Skip Turn) (Nova função)
+  setSkipEnabled(can) {
+    if (!this.skipBtn) return;
+    this.skipBtn.disabled = !can;
+    this.skipBtn.classList.toggle("enabled", can);
   }
 
 }
