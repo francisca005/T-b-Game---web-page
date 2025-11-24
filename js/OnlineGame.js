@@ -91,6 +91,8 @@ export class OnlineGame {
   }
 
   handleUpdate(data) {
+    console.log("[UPDATE from server]", data);
+
     if (data.error) {
       this.ui.addMessage("System", `Server error: ${data.error}`);
       return;
@@ -105,6 +107,15 @@ export class OnlineGame {
       this.dice = data.dice ?? this.dice;
 
       this.renderBoardFromPieces();
+    }
+
+    // jogo acabou de começar
+    if (!previousTurn && this.currentTurn) {
+      this.ui.addMessage("System", `Game started! First to play: ${this.currentTurn}.`);
+    }
+    // turno mudou
+    else if (previousTurn && this.currentTurn && previousTurn !== this.currentTurn) {
+      this.ui.addMessage("System", `It's now ${this.currentTurn}'s turn.`);
     }
 
     if (data.winner !== undefined) {
@@ -128,10 +139,36 @@ export class OnlineGame {
 
   canRoll() {
     const creds = this.ui.getCredentials();
-    if (!creds || !this.gameId) return false;
-    // só pode rolar se for a sua vez e o dado for null
-    return this.currentTurn === creds.nick && (this.dice === null || this.dice === undefined);
+    if (!creds) {
+      this.ui.addMessage("System", "You must log in before playing online.");
+      return false;
+    }
+
+    if (!this.gameId) {
+      this.ui.addMessage("System", "No active online game (gameId missing).");
+      return false;
+    }
+
+    // Ainda não recebemos info do servidor sobre quem tem a vez
+    if (!this.currentTurn) {
+      this.ui.addMessage("System", "Waiting for opponent / game start (no turn yet).");
+      return false;
+    }
+
+    if (this.currentTurn !== creds.nick) {
+      this.ui.addMessage("System", `It's not your turn, it's ${this.currentTurn}'s turn.`);
+      return false;
+    }
+
+    // Servidor só deixa rolar quando dice é null
+    if (this.dice !== null && this.dice !== undefined) {
+      this.ui.addMessage("System", "You already rolled the dice this turn.");
+      return false;
+    }
+
+    return true;
   }
+
 
   canPass() {
     const creds = this.ui.getCredentials();
