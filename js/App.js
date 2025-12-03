@@ -123,54 +123,47 @@ document.addEventListener("DOMContentLoaded", () => {
   const closeClassificationsBtn = document.querySelector(".close-classifications");
   const classificationsTableContainer = document.getElementById("classificationsTableContainer");
 
-  function renderClassifications() {
-    const classifications = JSON.parse(localStorage.getItem("classifications")) || [];
+  // ************************************************
+  // FUNÇÕES DE CLASSIFICAÇÃO MODIFICADAS/ADICIONADAS
+  // ************************************************
+  
+  // Helper para criar a estrutura da tabela com os cabeçalhos corretos (Wins/Date)
+  function createTableStructure(isServerRanking = true) {
+    const header1 = isServerRanking ? "Wins / Date" : "Date";
+    const header2 = "Winner";
+    const header3 = "Pieces Left";
 
-    // Caso não existam resultados
-    if (classifications.length === 0) {
-      classificationsTableContainer.innerHTML = "<p>No games played yet.</p>";
-      return;
-    }
-
-    // Ordena por número de peças restantes (decrescente)
-    classifications.sort((a, b) => {
-      const piecesA = parseInt(a.piecesLeft) || 0;
-      const piecesB = parseInt(b.piecesLeft) || 0;
-      return piecesB - piecesA; // decrescente
-    });
-    
-
-    // Cria tabela HTML
-    let tableHTML = `
+    return `
       <table>
         <thead>
           <tr>
-            <th>Date</th>
-            <th>Winner</th>
-            <th>Pieces Left</th>
+            <th>${header1}</th>
+            <th>${header2}</th>
+            <th>${header3}</th>
           </tr>
         </thead>
         <tbody>
+        </tbody>
+      </table>
     `;
-
-    classifications.forEach((c) => {
-      tableHTML += `
-        <tr>
-          <td>${c.date}</td>
-          <td>${c.winner}</td>
-          <td>${c.piecesLeft}</td>
-        </tr>
-      `;
-    });
-
-    tableHTML += "</tbody></table>";
-    classificationsTableContainer.innerHTML = tableHTML;
   }
-
+  
   // Abertura do popup  
   if (openClassificationsBtn) {
     openClassificationsBtn.addEventListener("click", () => {
-      renderClassifications();
+      
+      // 1. Cria a estrutura da tabela (necessário antes de popular o tbody)
+      classificationsTableContainer.innerHTML = createTableStructure(true);
+
+      // 2. Chama a função do UIManager para buscar e preencher os dados do servidor (RANKING ONLINE)
+      const currentSize = Number(ui.sizeInput.value) || 9;
+      
+      // Importa o GROUP_ID (necessário para o ranking) e chama a função de fetch
+      import("./ServerAPI.js").then(({ GROUP_ID }) => {
+          ui.fetchAndRenderServerRanking(GROUP_ID, currentSize);
+      });
+
+      // 3. Mostra o overlay
       classificationsOverlay.classList.remove("hidden");
 
       //Reaplica animação sempre que abre
