@@ -145,9 +145,6 @@ export class OnlineGame {
     const creds = this.ui.getCredentials();
     const serverIndex = this.uiCoordToServerIndex(row, col);
 
-    // Debug para verificar se o clique corresponde ao índice esperado
-    // console.log(`[Click] UI(${row},${col}) -> Server(${serverIndex})`);
-
     try {
       const res = await notify(creds.nick, creds.password, this.gameId, serverIndex);
       if (res.error) {
@@ -272,7 +269,7 @@ export class OnlineGame {
   }
 
   updateStatusMessage() {
-    // Pode adicionar lógica aqui para mensagens de status persistentes
+    // Mensagens de estado
   }
 
   renderBoard() {
@@ -307,11 +304,9 @@ export class OnlineGame {
     this.ui.updateCounts(goldCount, blackCount);
   }
 
-  // === CORREÇÃO DO MAPEAMENTO (Ziguezague) ===
-  
-  // A lógica de "serpente" implica que linhas pares e ímpares fluem em direções opostas.
-  // Servidor Row 0 (Bottom/Fundo) -> UI Row 3
-  // Servidor Row 3 (Top/Topo) -> UI Row 0
+  // === CORREÇÃO ESTÉTICA FINAL ===
+  // Gold (Rows Pares): Esquerda -> Direita (uiCol = serverCol)
+  // Black (Rows Ímpares): Direita -> Esquerda (uiCol = Invertido)
 
   serverIndexToUICoord(idx) {
     const serverRow = Math.floor(idx / this.size);
@@ -322,10 +317,9 @@ export class OnlineGame {
     
     let uiCol;
     
-    // Aplica o Ziguezague:
-    // Se a linha do servidor for PAR (0 ou 2), inverte a coluna (Direita -> Esquerda visualmente)
-    // Se for ÍMPAR (1 ou 3), mantém a coluna (Esquerda -> Direita visualmente)
-    if (serverRow % 2 === 0) {
+    // Se a linha do servidor for PAR (0 ou 2), NÃO INVERTE (começa na Esquerda/0)
+    // Se a linha do servidor for ÍMPAR (1 ou 3), INVERTE (começa na Direita/Max)
+    if (serverRow % 2 !== 0) {
       uiCol = (this.size - 1) - serverCol;
     } else {
       uiCol = serverCol;
@@ -335,13 +329,12 @@ export class OnlineGame {
   }
 
   uiCoordToServerIndex(uiRow, uiCol) {
-    // Inverso da linha
     const serverRow = 3 - uiRow;
     
     let serverCol;
     
-    // Inverso do Ziguezague
-    if (serverRow % 2 === 0) {
+    // Mesma lógica inversa
+    if (serverRow % 2 !== 0) {
       serverCol = (this.size - 1) - uiCol;
     } else {
       serverCol = uiCol;
