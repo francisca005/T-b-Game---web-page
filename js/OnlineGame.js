@@ -47,6 +47,10 @@ export class OnlineGame {
     this._extraRollReady = false;
 
     this.handleUpdate = this.handleUpdate.bind(this);
+
+    // evita repetir animação quando o SSE manda updates com o mesmo dice
+    this._lastDiceAnimKey = null;
+
   }
 
   // --------- AUTH ---------
@@ -376,11 +380,28 @@ export class OnlineGame {
     // --- dice UI ---
     if (this.dice && typeof this.dice.value === "number") {
       const val = this.dice.value;
-      const symbol = this.symbolForDice(val);
-      this.ui.animateSticks(symbol, val, false);
+
+      // se o servidor mandar stickValues (array de 4 booleans), usa-os
+      const stickValues =
+        Array.isArray(this.dice.stickValues) && this.dice.stickValues.length === 4
+          ? this.dice.stickValues
+          : null;
+
+      // chave para não repetir animação com o mesmo roll
+      const key = `${val}:${stickValues ? stickValues.map(v => (v ? 1 : 0)).join("") : "auto"}`;
+
+      if (key !== this._lastDiceAnimKey) {
+        this._lastDiceAnimKey = key;
+
+        // repeat: mantém como false (igual ao teu comportamento anterior)
+        // se quiseres mostrar "(repeat)" quando keepPlaying, troca o 3º arg por: !!this.dice.keepPlaying
+        this.ui.animateSticks(stickValues, val, false);
+      }
     } else {
+      this._lastDiceAnimKey = null;
       this.ui.resultEl?.classList.remove("show");
     }
+
 
     // -------- Buttons logic --------
     const myTurn = (this.turn === this.nick);
@@ -484,15 +505,6 @@ export class OnlineGame {
       }
     }
     return { g, b };
-  }
-
-  symbolForDice(value) {
-    if (value === 6) return "••••";
-    if (value === 1) return "⎮•••";
-    if (value === 2) return "⎮⎮••";
-    if (value === 3) return "⎮⎮⎮•";
-    if (value === 4) return "⎮⎮⎮⎮";
-    return "—";
   }
 
   // --------- COLOR / ROLE MAPPING ---------
