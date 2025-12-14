@@ -764,3 +764,18 @@ select {
   margin-top: 5px;
   font-weight: 500;
 }
+
+/* Canvas sticks (small + big overlay) */
+.sticks-canvas {
+  display: block;
+  margin: 10px auto 6px;
+  width: 260px;
+  max-width: 100%;
+  height: auto;
+}
+
+.sticks-canvas--big {
+  width: 640px;
+  max-width: 90vw;
+}
+

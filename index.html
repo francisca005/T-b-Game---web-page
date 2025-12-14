@@ -248,10 +248,20 @@
       <!-- Left: Sticks -->
       <div class="sticks-area card">
         <h2>Throw Sticks</h2>
-        <div class="sticks">⎮⎮⎮⎮</div>
+
+        <canvas id="sticksCanvas" class="sticks-canvas" width="260" height="70" aria-label="sticks"></canvas>
+
         <p class="result">Result: —</p>
         <button class="throw-btn">Throw</button>
       </div>
+
+      <!-- Overlay animation for sticks when throwing -->
+      <div id="sticks-overlay" class="sticks-overlay hidden">
+        <canvas id="sticksOverlayCanvas" class="sticks-canvas sticks-canvas--big"
+                width="640" height="260" aria-label="sticks overlay"></canvas>
+        <p class="sticks-result">Result: —</p>
+      </div>
+
 
       <!-- Center: Board -->
       <div class="board-area card">
@@ -278,12 +288,6 @@
         </div>
       </div>
     </section>
-
-    <!-- Overlay animation for sticks when throwing -->
-    <div id="sticks-overlay" class="sticks-overlay hidden">
-      <div class="sticks-big">⎮⎮⎮⎮</div>
-      <p class="sticks-result">Result: —</p>
-    </div>
 
     <!-- Main application script -->
     <script type="module" src="js/App.js"></script>
