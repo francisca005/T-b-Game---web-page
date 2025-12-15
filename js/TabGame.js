@@ -260,7 +260,13 @@ export class TabGame {
 
   // Movimento de Peças
   movePiece(fromIdx, toIdx) {
+    
     const movingPiece = this.board[fromIdx];
+    if (movingPiece) {
+      // ghost move (não bloqueia lógica)
+      this.ui.animatePieceMove?.(fromIdx, toIdx, { player: movingPiece.player, type: movingPiece.type });
+    }
+
     const targetPiece = this.board[toIdx];
     this.board[toIdx] = movingPiece;
     this.board[fromIdx] = null;

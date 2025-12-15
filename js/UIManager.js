@@ -55,6 +55,13 @@ export class UIManager {
     this.overlay = document.getElementById("sticks-overlay");
     this.bigResult = this.overlay?.querySelector(".sticks-result") || null;
 
+    // Canvas de efeitos no tabuleiro (movimentos, partículas, etc.)
+    this.boardWrap = document.querySelector(".board-wrap");
+    this.boardFxCanvas = document.getElementById("boardFxCanvas");
+    this.boardFxCtx = this.boardFxCanvas?.getContext?.("2d") || null;
+    this._fxAnimRaf = null;
+
+
     // Timers da animação dos paus
     this._sticksAnimTimer = null;
     this._sticksOverlayHideTimer = null;
@@ -96,6 +103,7 @@ export class UIManager {
 
     // desenha sticks iniciais (agora já existe o método)
     this._drawSticksBoth([true, true, true, true], { jitter: 0, rotAmp: 0, idle: true });
+    window.addEventListener("resize", () => this._resizeBoardFxCanvas?.());
   }
 
   // Login (usado no modo online; /register serve como registo + verificação)
@@ -211,6 +219,8 @@ export class UIManager {
         this.boardEl.appendChild(div);
       });
     });
+
+    this._resizeBoardFxCanvas?.();
 
     // Atualiza status visual do jogador ativo
     document.querySelectorAll(".status-bar span").forEach((el) => el.classList.remove("active"));
@@ -464,6 +474,146 @@ export class UIManager {
     }, 1000 / fps);
   }
 
+  // ---------- Board FX Canvas helpers ----------
+
+  _resizeBoardFxCanvas() {
+    if (!this.boardFxCanvas || !this.boardFxCtx) return;
+    const refEl = this.boardWrap || this.boardEl;
+    if (!refEl) return;
+
+    const rect = refEl.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+
+    this.boardFxCanvas.width = Math.max(1, Math.round(rect.width * dpr));
+    this.boardFxCanvas.height = Math.max(1, Math.round(rect.height * dpr));
+    this.boardFxCanvas.style.width = `${rect.width}px`;
+    this.boardFxCanvas.style.height = `${rect.height}px`;
+
+    // desenhar em "CSS pixels"
+    this.boardFxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.boardFxCtx.clearRect(0, 0, rect.width, rect.height);
+  }
+
+  _clearBoardFx() {
+    if (!this.boardFxCanvas || !this.boardFxCtx) return;
+    const refEl = this.boardWrap || this.boardEl;
+    if (!refEl) return;
+    const rect = refEl.getBoundingClientRect();
+    this.boardFxCtx.clearRect(0, 0, rect.width, rect.height);
+  }
+
+  _cellCenterPx(r, c) {
+    if (!this.boardEl) return null;
+    const cols = this.cols || 9;
+    const idx = r * cols + c;
+    const cell = this.boardEl.children[idx];
+    if (!cell) return null;
+
+    const wrapRect = (this.boardWrap || this.boardEl).getBoundingClientRect();
+    const cr = cell.getBoundingClientRect();
+
+    return {
+      x: (cr.left - wrapRect.left) + cr.width / 2,
+      y: (cr.top - wrapRect.top) + cr.height / 2
+    };
+  }
+
+  _drawChipFx(ctx, x, y, player, type, alpha = 1, scale = 1) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+
+    // igual ao CSS (chip 36x36)
+    const half = 18;
+
+    const isGold = player === "G";
+    ctx.fillStyle = isGold ? "#d4af37" : "#222";
+    ctx.strokeStyle = isGold ? "#bfa100" : "#444";
+    ctx.lineWidth = 2;
+
+    // sombra leve
+    ctx.shadowColor = "rgba(0,0,0,0.25)";
+    ctx.shadowBlur = 6;
+
+    if (type === "final") {
+      ctx.rotate(Math.PI / 4);
+      ctx.beginPath();
+      ctx.rect(-half, -half, half * 2, half * 2);
+    } else if (type === "moved") {
+      ctx.beginPath();
+      ctx.rect(-half, -half, half * 2, half * 2);
+    } else {
+      ctx.beginPath();
+      ctx.arc(0, 0, half, 0, Math.PI * 2);
+    }
+
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // animação simples (ghost) do quadrado fromIdx -> toIdx
+  animatePieceMove(fromIdx, toIdx, pieceLike) {
+    if (!this.boardFxCanvas || !this.boardFxCtx || !this.boardEl) return;
+    if (typeof fromIdx !== "number" || typeof toIdx !== "number") return;
+
+    const cols = this.cols || 9;
+
+    const fromR = Math.floor(fromIdx / cols);
+    const fromC = fromIdx % cols;
+    const toR = Math.floor(toIdx / cols);
+    const toC = toIdx % cols;
+
+    const A = this._cellCenterPx(fromR, fromC);
+    const B = this._cellCenterPx(toR, toC);
+    if (!A || !B) return;
+
+    // cancela animação anterior
+    if (this._fxAnimRaf) {
+      cancelAnimationFrame(this._fxAnimRaf);
+      this._fxAnimRaf = null;
+    }
+
+    const player = pieceLike?.player || "G";
+    const type = pieceLike?.type || "initial";
+
+    const refEl = this.boardWrap || this.boardEl;
+    const rect = refEl.getBoundingClientRect();
+    const ctx = this.boardFxCtx;
+
+    const dur = 380; // ms
+    const t0 = performance.now();
+
+    const easeInOutQuad = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+
+    const frame = (now) => {
+      const raw = (now - t0) / dur;
+      const t = Math.max(0, Math.min(1, raw));
+      const e = easeInOutQuad(t);
+
+      ctx.clearRect(0, 0, rect.width, rect.height);
+
+      // interp + pequeno "salto"
+      const x = A.x + (B.x - A.x) * e;
+      const y = A.y + (B.y - A.y) * e - Math.sin(Math.PI * e) * 10;
+
+      // ghost por cima (ligeiramente maior)
+      this._drawChipFx(ctx, x, y, player, type, 0.85, 1.05);
+
+      if (t < 1) {
+        this._fxAnimRaf = requestAnimationFrame(frame);
+      } else {
+        this._fxAnimRaf = null;
+        ctx.clearRect(0, 0, rect.width, rect.height);
+      }
+    };
+
+    this._fxAnimRaf = requestAnimationFrame(frame);
+  }
+
+
   // som
   playSound(url, vol = 0.3) {
     const audio = new Audio(url);
@@ -495,6 +645,7 @@ export class UIManager {
     this._stopSticksAnimation();
     this.overlay?.classList.add("hidden");
     this._drawSticksBoth([true, true, true, true], { jitter: 0, rotAmp: 0, idle: true });
+    this._clearBoardFx?.();
   }
 
   refreshRollButton(game) {
