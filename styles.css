@@ -231,7 +231,6 @@ select {
   color: var(--dark);
 }
 
-/* Throw button disabled look (like Skip Turn) */
 .throw-btn:disabled,
 .throw-btn:not(.enabled) {
   background: #ddd2b8;
@@ -240,7 +239,6 @@ select {
   opacity: 0.85;
 }
 
-/* prevent hover style when disabled */
 .throw-btn:disabled:hover,
 .throw-btn:not(.enabled):hover {
   background: #ddd2b8;
@@ -778,10 +776,10 @@ select {
   max-width: 90vw;
 }
 
-/* Canvas overlay em cima do tabuleiro (efeitos/animações) */
+/* Canvas overlay em cima do tabuleiro */
 .board-wrap {
   position: relative;
-  display: inline-block;   /* para o wrap ter exatamente o tamanho da grid */
+  display: inline-block;   
 }
 
 .board-fx-canvas {
@@ -789,8 +787,8 @@ select {
   inset: 0;
   width: 100%;
   height: 100%;
-  pointer-events: none;    /* não bloqueia cliques */
-  z-index: 5;              /* por cima da grid */
+  pointer-events: none;    
+  z-index: 5;              
 }
 
 .board {
